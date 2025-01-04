@@ -64,7 +64,7 @@ const cookieOptions = {
 // Register
 const register = async (req, res, next) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, email, password ,category} = req.body;
 
     if (!fullName || !email || !password) {
       return next(new AppError("All fields are required", 400));
@@ -74,6 +74,7 @@ const register = async (req, res, next) => {
       fullName,
       email,
       password,
+      category,
       avatar: {
         public_id: email,
         secure_url: "",
@@ -86,6 +87,7 @@ const register = async (req, res, next) => {
 
       user.avatar.public_id = fileName;
       user.avatar.secure_url = uploadResult.Location;
+      user.category=category
 
       fs.rmSync(req.file.path); // Remove file from server
     }

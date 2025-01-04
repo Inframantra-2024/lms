@@ -50,7 +50,22 @@ const deleteFromSpaces = async (fileName) => {
 // Get all courses
 const getAllCourses = async (req, res, next) => {
   try {
-    const courses = await courseModel.find({}).select('-lectures');
+    console.log(req.user)
+    // id: '6778d6efdda829818ddeae2b',
+    // email: 'rohitkumar77088@gmail.com',
+    // role: 'USER',
+    // category: 'digital',
+    const {email,role,category}=req.user
+    let courses
+    if(role == "USER"){
+        if(category){
+             courses = await courseModel.find({category}).select('-lectures');  
+        }else{
+             courses = await courseModel.find().select('-lectures');
+        }
+    }else{
+         courses = await courseModel.find().select('-lectures');
+    }
     res.status(200).json({
       success: true,
       message: 'All courses',

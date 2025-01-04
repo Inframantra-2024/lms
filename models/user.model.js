@@ -25,6 +25,10 @@ const userSchema = new Schema({
         minLength: [4, 'Password must be at least 4 character'],
         select: false
     },
+    category: {
+        type: String,
+        required: [true, 'Category is required'],
+    },
     avatar: {
         public_id: {
             type: String
@@ -61,7 +65,7 @@ userSchema.pre('save', async function (next) {
 userSchema.methods = {
     generateJWTToken: function () {
         return jwt.sign(
-            { id: this._id, email: this.email, role: this.role },
+            { id: this._id, email: this.email, role: this.role,category:this.category },
             process.env.JWT_SECRET,
             { expiresIn: "2d" }
         )
