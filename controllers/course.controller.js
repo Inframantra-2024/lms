@@ -1,9 +1,11 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, Upload } from '@aws-sdk/client-s3';
+import pkg from '@aws-sdk/client-s3';
+
 import courseModel from '../models/course.model.js';
 import AppError from '../utils/error.utils.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config();
+const { S3Client, PutObjectCommand, DeleteObjectCommand, Upload } = pkg;
 
 // Configure AWS SDK for DigitalOcean Spaces
 const s3Client = new S3Client({
