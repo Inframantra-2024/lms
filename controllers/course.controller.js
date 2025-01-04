@@ -1,12 +1,11 @@
-import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } from '@aws-sdk/client-s3';
-import fs from 'fs';
-import dotenv from 'dotenv';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import courseModel from '../models/course.model.js';
 import AppError from '../utils/error.utils.js';
-
+import fs from 'fs';
+import dotenv from 'dotenv';
 dotenv.config();
 
-// Initialize the S3 client for DigitalOcean Spaces
+// Configure AWS SDK for DigitalOcean Spaces
 const s3Client = new S3Client({
   endpoint: "https://blr1.digitaloceanspaces.com", // DigitalOcean Spaces endpoint
   region: "blr1", // Your Spaces region
@@ -16,107 +15,126 @@ const s3Client = new S3Client({
   },
 });
 
-// Utility function to upload video in chunks (multipart upload)
-const uploadVideoInChunks = async (filePath, fileName) => {
-  const fileStream = fs.createReadStream(filePath);
-  const fileSize = fs.statSync(filePath).size;
 
-  const uploadParams = {
-    Bucket: process.env.DO_SPACES_BUCKET,
-    Key: fileName,
-    Body: fileStream,
+// Utility function to upload to Spaces
+const uploadToSpaces = async (filePath, fileName) => {
+  const fileContent = fs.readFileSync(filePath);
+
+  const params = {
+    Bucket:process.env.DO_SPACES_BUCKET, // Your bucket name
+    Key: fileName, // File name to save in Spaces
+    Body: fileContent,
     ACL: 'public-read', // Make it publicly readable
   };
 
-  try {
-    // Step 1: Initiate the multipart upload
-    const createMultipartUploadCommand = new CreateMultipartUploadCommand(uploadParams);
-    const multipartUpload = await s3Client.send(createMultipartUploadCommand);
-    const uploadId = multipartUpload.UploadId;
-    
-    const partSize = 5 * 1024 * 1024;  // Set part size to 5MB per chunk
-    const parts = [];
+  const command = new PutObjectCommand(params);
+  await s3Client.send(command);
 
-    // Step 2: Upload the file in chunks
-    for (let startByte = 0; startByte < fileSize; startByte += partSize) {
-      const chunkSize = Math.min(partSize, fileSize - startByte);
-      const filePartStream = fs.createReadStream(filePath, { start: startByte, end: startByte + chunkSize - 1 });
-
-      const uploadPartParams = {
-        Bucket: process.env.DO_SPACES_BUCKET,
-        Key: fileName,
-        PartNumber: Math.floor(startByte / partSize) + 1,
-        UploadId: uploadId,
-        Body: filePartStream,
-      };
-
-      const uploadPartCommand = new UploadPartCommand(uploadPartParams);
-      const uploadedPart = await s3Client.send(uploadPartCommand);
-
-      parts.push({
-        ETag: uploadedPart.ETag,
-        PartNumber: Math.floor(startByte / partSize) + 1,
-      });
-    }
-
-    // Step 3: Complete the multipart upload
-    const completeMultipartUploadCommand = new CompleteMultipartUploadCommand({
-      Bucket: process.env.DO_SPACES_BUCKET,
-      Key: fileName,
-      UploadId: uploadId,
-      MultipartUpload: { Parts: parts },
-    });
-
-    const result = await s3Client.send(completeMultipartUploadCommand);
-
-    return result;
-  } catch (error) {
-    console.error('Error uploading file in chunks:', error);
-    throw new Error('Error uploading video in chunks');
-  }
+  return {
+    Location: `https://${process.env.DO_SPACES_BUCKET}.blr1.digitaloceanspaces.com/${fileName}`,
+    Key: fileName,
+  };
 };
 
+// Utility function to delete from Spaces
+const deleteFromSpaces = async (fileName) => {
+  const params = {
+    Bucket: process.env.DO_SPACES_BUCKET,
+    Key: fileName,
+  };
 
-// Add a lecture to a course by ID
-const addLectureToCourseById = async (req, res, next) => {
+  const command = new DeleteObjectCommand(params);
+  await s3Client.send(command);
+};
+
+// Get all courses
+const getAllCourses = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { title, description } = req.body;
-
-    if (!title || !description) {
-      return next(new AppError('All fields are required', 400));
+    console.log(req.user)
+    // id: '6778d6efdda829818ddeae2b',
+    // email: 'rohitkumar77088@gmail.com',
+    // role: 'USER',
+    // category: 'digital',
+    const {email,role,category}=req.user
+    let courses
+    if(role == "USER"){
+        if(category){
+             courses = await courseModel.find({category}).select('-lectures');  
+        }else{
+             courses = await courseModel.find().select('-lectures');
+        }
+    }else{
+         courses = await courseModel.find().select('-lectures');
     }
-
-    const course = await courseModel.findById(id);
-    if (!course) {
-      return next(new AppError('Course not found', 404));
-    }
-
-    const lectureData = { title, description, lecture: {} };
-
-    if (req.file) {
-      const fileName = `Learning-Management-System/${Date.now()}-${req.file.filename}`;
-      const uploadResult = await uploadVideoInChunks(req.file.path, fileName); // Use chunked upload
-
-      lectureData.lecture.public_id = fileName;
-      lectureData.lecture.secure_url = uploadResult.Location;
-    }
-
-    course.lectures.push(lectureData);
-    course.numberOfLectures = course.lectures.length;
-
-    await course.save();
-
     res.status(200).json({
       success: true,
-      message: 'Lecture added successfully',
+      message: 'All courses',
+      courses,
     });
   } catch (e) {
     return next(new AppError(e.message, 500));
   }
 };
 
-// Update an existing course
+// Get specific course
+const getLecturesByCourseId = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const course = await courseModel.findById(id);
+
+    if (!course) {
+      return next(new AppError('Course not found', 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Course found',
+      course,
+    });
+  } catch (e) {
+    return next(new AppError(e.message, 500));
+  }
+};
+
+// Create course
+const createCourse = async (req, res, next) => {
+  try {
+    const { title, description, category, createdBy } = req.body;
+
+    if (!title || !description || !category || !createdBy) {
+      return next(new AppError('All fields are required', 400));
+    }
+
+    const course = await courseModel.create({
+      title,
+      description,
+      category,
+      createdBy,
+    });
+
+    if (req.file) {
+      const fileName = `Learning-Management-System/${req.file.filename}`;
+      const uploadResult = await uploadToSpaces(req.file.path, fileName);
+
+      course.thumbnail.public_id = fileName;
+      course.thumbnail.secure_url = uploadResult.Location;
+
+      fs.rmSync(`uploads/${req.file.filename}`);
+    
+    }
+    await course.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Course successfully created',
+      course,
+    });
+  } catch (e) {
+    return next(new AppError(e.message, 500));
+  }
+};
+
+// Update course
 const updateCourse = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -132,12 +150,12 @@ const updateCourse = async (req, res, next) => {
       }
 
       const fileName = `Learning-Management-System/${Date.now()}-${req.file.filename}`;
-      const uploadResult = await uploadVideoInChunks(req.file.path, fileName); // Use chunked upload
+      const uploadResult = await uploadToSpaces(req.file.path, fileName);
 
       course.thumbnail.public_id = fileName;
       course.thumbnail.secure_url = uploadResult.Location;
 
-      fs.rmSync(req.file.path); // Clean up the file after upload
+      fs.rmSync(req.file.path);
     }
 
     await course.updateOne({ $set: req.body }, { runValidators: true });
@@ -151,7 +169,7 @@ const updateCourse = async (req, res, next) => {
   }
 };
 
-// Delete a course
+// Remove course
 const removeCourse = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -176,5 +194,145 @@ const removeCourse = async (req, res, next) => {
   }
 };
 
-export { addLectureToCourseById, updateCourse, removeCourse };
+// Add lecture to course by ID
+const addLectureToCourseById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, description } = req.body;
+    console.log(req.body)
 
+    if (!title || !description) {
+      return next(new AppError('All fields are required', 400));
+    }
+
+    const course = await courseModel.findById(id);
+    if (!course) {
+      return next(new AppError('Course not found', 404));
+    }
+
+    const lectureData = { title, description, lecture: {} };
+
+    if (req.file) {
+      const fileName = `Learning-Management-System/${Date.now()}-${req.file.filename}`;
+      const uploadResult = await uploadToSpaces(req.file.path, fileName);
+
+      lectureData.lecture.public_id = fileName;
+      lectureData.lecture.secure_url = uploadResult.Location;
+
+    //   fs.rmSync(req.file.path);
+    }
+
+    course.lectures.push(lectureData);
+    course.numberOfLectures = course.lectures.length;
+
+    await course.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Lecture added successfully',
+    });
+  } catch (e) {
+    console.log(e)
+    return next(new AppError(e.message, 500));
+  }
+};
+
+// Delete lecture
+const deleteCourseLecture = async (req, res, next) => {
+  try {
+    const { courseId, lectureId } = req.query;
+    const course = await courseModel.findById(courseId);
+
+    if (!course) {
+      return next(new AppError('Course not found', 404));
+    }
+
+    const lectureIndex = course.lectures.findIndex(
+      (lecture) => lecture._id.toString() === lectureId
+    );
+
+    if (lectureIndex === -1) {
+      return next(new AppError('Lecture not found', 404));
+    }
+
+    const lecture = course.lectures[lectureIndex];
+    if (lecture.lecture.public_id) {
+      await deleteFromSpaces(lecture.lecture.public_id);
+    }
+
+    course.lectures.splice(lectureIndex, 1);
+    course.numberOfLectures = course.lectures.length;
+
+    await course.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Lecture deleted successfully',
+    });
+  } catch (e) {
+    return next(new AppError(e.message, 500));
+  }
+};
+
+// Update lecture
+const updateCourseLecture = async (req, res, next) => {
+  try {
+    const { courseId, lectureId } = req.query;
+    const { title, description } = req.body;
+
+    if (!title || !description) {
+      return next(new AppError('All fields are required', 400));
+    }
+
+    const course = await courseModel.findById(courseId);
+    if (!course) {
+      return next(new AppError('Course not found', 404));
+    }
+
+    const lectureIndex = course.lectures.findIndex(
+      (lecture) => lecture._id.toString() === lectureId
+    );
+
+    if (lectureIndex === -1) {
+      return next(new AppError('Lecture not found', 404));
+    }
+
+    const lecture = course.lectures[lectureIndex];
+    if (req.file) {
+      if (lecture.lecture.public_id) {
+        await deleteFromSpaces(lecture.lecture.public_id);
+      }
+
+      const fileName = `Learning-Management-System/${Date.now()}-${req.file.filename}`;
+      const uploadResult = await uploadToSpaces(req.file.path, fileName);
+
+      lecture.lecture.public_id = fileName;
+      lecture.lecture.secure_url = uploadResult.Location;
+
+      fs.rmSync(req.file.path);
+    }
+
+    lecture.title = title;
+    lecture.description = description;
+
+    await course.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Lecture updated successfully',
+    });
+  } catch (e) {
+    return next(new AppError(e.message, 500));
+  }
+};
+
+export {
+  getAllCourses,
+  getLecturesByCourseId,
+  createCourse,
+  updateCourse,
+  removeCourse,
+  addLectureToCourseById,
+  deleteCourseLecture,
+  updateCourseLecture,
+};
