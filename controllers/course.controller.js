@@ -204,6 +204,7 @@ const addLectureToCourseById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, description } = req.body;
+    console.log(req.body)
 
     if (!title || !description) {
       return next(new AppError('All fields are required', 400));
