@@ -1,6 +1,9 @@
 import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import courseModel from '../models/course.model.js';
+import AppError from '../utils/error.utils.js';
+
 dotenv.config();
 
 // Initialize the S3 client for DigitalOcean Spaces
@@ -73,10 +76,6 @@ const uploadVideoInChunks = async (filePath, fileName) => {
   }
 };
 
-import courseModel from '../models/course.model.js';
-import AppError from '../utils/error.utils.js';
-import fs from 'fs';
-import { uploadVideoInChunks } from '../utils/uploadVideoInChunks.js'; // Import the upload function
 
 // Add a lecture to a course by ID
 const addLectureToCourseById = async (req, res, next) => {
