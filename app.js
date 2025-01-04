@@ -23,6 +23,11 @@ app.use(cors({
     origin: 'http://localhost:5173', // Replace with your frontend URL
     credentials: true, // Allow cookies and credentials
 }));
+app.use((req, res, next) => {
+    req.setTimeout(300000); // 300 seconds (5 minutes)
+    res.setTimeout(300000); // 300 seconds (5 minutes)
+    next();
+  });
 
 
 app.use('/api/v1/user', userRoutes); 
