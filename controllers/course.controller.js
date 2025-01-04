@@ -15,13 +15,12 @@ const s3Client = new S3Client({
   },
 });
 
-
-// Utility function to upload to Spaces
+// Utility function to upload a file to DigitalOcean Spaces
 const uploadToSpaces = async (filePath, fileName) => {
   const fileContent = fs.readFileSync(filePath);
 
   const params = {
-    Bucket:process.env.DO_SPACES_BUCKET, // Your bucket name
+    Bucket: process.env.DO_SPACES_BUCKET, // Your bucket name
     Key: fileName, // File name to save in Spaces
     Body: fileContent,
     ACL: 'public-read', // Make it publicly readable
@@ -36,7 +35,7 @@ const uploadToSpaces = async (filePath, fileName) => {
   };
 };
 
-// Utility function to delete from Spaces
+// Utility function to delete a file from DigitalOcean Spaces
 const deleteFromSpaces = async (fileName) => {
   const params = {
     Bucket: process.env.DO_SPACES_BUCKET,
@@ -50,22 +49,18 @@ const deleteFromSpaces = async (fileName) => {
 // Get all courses
 const getAllCourses = async (req, res, next) => {
   try {
-    console.log(req.user)
-    // id: '6778d6efdda829818ddeae2b',
-    // email: 'rohitkumar77088@gmail.com',
-    // role: 'USER',
-    // category: 'digital',
-    const {email,role,category}=req.user
-    let courses
-    if(role == "USER"){
-        if(category){
-             courses = await courseModel.find({category}).select('-lectures');  
-        }else{
-             courses = await courseModel.find().select('-lectures');
-        }
-    }else{
-         courses = await courseModel.find().select('-lectures');
+    const { email, role, category } = req.user;
+    let courses;
+    if (role === "USER") {
+      if (category) {
+        courses = await courseModel.find({ category }).select('-lectures');
+      } else {
+        courses = await courseModel.find().select('-lectures');
+      }
+    } else {
+      courses = await courseModel.find().select('-lectures');
     }
+
     res.status(200).json({
       success: true,
       message: 'All courses',
@@ -76,7 +71,7 @@ const getAllCourses = async (req, res, next) => {
   }
 };
 
-// Get specific course
+// Get specific course by ID
 const getLecturesByCourseId = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -96,7 +91,7 @@ const getLecturesByCourseId = async (req, res, next) => {
   }
 };
 
-// Create course
+// Create a new course
 const createCourse = async (req, res, next) => {
   try {
     const { title, description, category, createdBy } = req.body;
@@ -120,8 +115,8 @@ const createCourse = async (req, res, next) => {
       course.thumbnail.secure_url = uploadResult.Location;
 
       fs.rmSync(`uploads/${req.file.filename}`);
-    
     }
+
     await course.save();
 
     res.status(200).json({
@@ -134,7 +129,7 @@ const createCourse = async (req, res, next) => {
   }
 };
 
-// Update course
+// Update an existing course
 const updateCourse = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -169,7 +164,7 @@ const updateCourse = async (req, res, next) => {
   }
 };
 
-// Remove course
+// Remove a course
 const removeCourse = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -194,15 +189,15 @@ const removeCourse = async (req, res, next) => {
   }
 };
 
-// Add lecture to course by ID
+// Add a lecture to a course by ID
 const addLectureToCourseById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, description } = req.body;
 
-    if (!title || !description) {
-      return next(new AppError('All fields are required', 400));
-    }
+    // if (!title || !description) {
+    //   return next(new AppError('All fields are required', 400));
+    // }
 
     const course = await courseModel.findById(id);
     if (!course) {
@@ -217,8 +212,6 @@ const addLectureToCourseById = async (req, res, next) => {
 
       lectureData.lecture.public_id = fileName;
       lectureData.lecture.secure_url = uploadResult.Location;
-
-      fs.rmSync(req.file.path);
     }
 
     course.lectures.push(lectureData);
@@ -231,12 +224,11 @@ const addLectureToCourseById = async (req, res, next) => {
       message: 'Lecture added successfully',
     });
   } catch (e) {
-    console.log(e)
     return next(new AppError(e.message, 500));
   }
 };
 
-// Delete lecture
+// Delete a lecture from a course
 const deleteCourseLecture = async (req, res, next) => {
   try {
     const { courseId, lectureId } = req.query;
@@ -273,7 +265,7 @@ const deleteCourseLecture = async (req, res, next) => {
   }
 };
 
-// Update lecture
+// Update a lecture in a course
 const updateCourseLecture = async (req, res, next) => {
   try {
     const { courseId, lectureId } = req.query;
